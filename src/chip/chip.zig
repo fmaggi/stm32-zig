@@ -4,7 +4,7 @@ pub const devices = struct {
     ///  STM32F103
     pub const STM32F103 = struct {
         pub const properties = struct {
-            pub const @"cpu.nvic_prio_bits" = "4";
+            pub const @"cpu.nvic_prio_bits" = 4;
             pub const @"cpu.endian" = "little";
             pub const @"cpu.revision" = "r1p1";
             pub const @"cpu.name" = "CM3";
@@ -34,7 +34,8 @@ pub const devices = struct {
             };
 
             fn _unhandled() callconv(.C) noreturn {
-                @panic("unhandled interrupt");
+                @breakpoint();
+                while (true) {}
             }
 
             pub const unhandled = Handler{
@@ -48,10 +49,10 @@ pub const devices = struct {
             MemManageFault: Handler = unhandled,
             BusFault: Handler = unhandled,
             UsageFault: Handler = unhandled,
-            reserved5: [4]u32 = undefined,
+            reserved5: [4]u32 = [_]u32{0} ** 4,
             SVCall: Handler = unhandled,
             DebugMonitor: Handler = unhandled,
-            reserved11: [1]u32 = undefined,
+            reserved11: [1]u32 = [_]u32{0},
             PendSV: Handler = unhandled,
             SysTick: Handler = unhandled,
             ///  Window Watchdog interrupt
@@ -66,25 +67,38 @@ pub const devices = struct {
             FLASH: Handler = unhandled,
             ///  RCC global interrupt
             RCC: Handler = unhandled,
-            reserved20: [5]u32 = undefined,
-            ///  DMA1 Channel1 global interrupt
+            /// EXTI channels 0-4
+            EXTI0: Handler = unhandled,
+            EXTI1: Handler = unhandled,
+            EXTI2: Handler = unhandled,
+            EXTI3: Handler = unhandled,
+            EXTI4: Handler = unhandled,
+            ///  DMA1 Channels 1-7 global interrupt
             DMA1_Channel1: Handler = unhandled,
-            reserved26: [6]u32 = undefined,
+            DMA1_Channel2: Handler = unhandled,
+            DMA1_Channel3: Handler = unhandled,
+            DMA1_Channel4: Handler = unhandled,
+            DMA1_Channel5: Handler = unhandled,
+            DMA1_Channel6: Handler = unhandled,
+            DMA1_Channel7: Handler = unhandled,
             ///  ADC1 and ADC2 global interrupt
             ADC1_2: Handler = unhandled,
             ///  USB High Priority or CAN TX interrupts
             USB_HP_CAN_TX: Handler = unhandled,
-            reserved34: [1]u32 = undefined,
+            USB_LP_CAN_RX0: Handler = unhandled,
             ///  CAN RX1 interrupt
             CAN_RX1: Handler = unhandled,
-            reserved36: [2]u32 = undefined,
+            CAN_SCE: Handler = unhandled,
+
+            EXTI9_5: Handler = unhandled,
             ///  TIM1 Break interrupt
             TIM1_BRK: Handler = unhandled,
             ///  TIM1 Update interrupt
             TIM1_UP: Handler = unhandled,
             ///  TIM1 Trigger and Commutation interrupts
             TIM1_TRG_COM: Handler = unhandled,
-            reserved41: [1]u32 = undefined,
+            ///  TIM1 Capture Compare interrupt
+            TIM1_CC: Handler = unhandled,
             ///  TIM2 global interrupt
             TIM2: Handler = unhandled,
             ///  TIM3 global interrupt
@@ -93,10 +107,10 @@ pub const devices = struct {
             TIM4: Handler = unhandled,
             ///  I2C1 event interrupt
             I2C1_EV: Handler = unhandled,
-            reserved46: [1]u32 = undefined,
+            I2C1_ER: Handler = unhandled,
             ///  I2C2 event interrupt
             I2C2_EV: Handler = unhandled,
-            reserved48: [1]u32 = undefined,
+            I2C2_ER: Handler = unhandled,
             ///  SPI1 global interrupt
             SPI1: Handler = unhandled,
             ///  SPI2 global interrupt
@@ -107,30 +121,29 @@ pub const devices = struct {
             USART2: Handler = unhandled,
             ///  USART3 global interrupt
             USART3: Handler = unhandled,
-            reserved54: [3]u32 = undefined,
-            ///  TIM8 Break interrupt
+            /// EXTI channels 15-10
+            EXTI15_10: Handler = unhandled,
+            /// RTC alarm
+            RTC_Alarm: Handler = unhandled,
+            /// USB wake up
+            USBWakeUp: Handler = unhandled,
             TIM8_BRK: Handler = unhandled,
-            reserved58: [3]u32 = undefined,
-            ///  ADC3 global interrupt
+            TIM8_UP: Handler = unhandled,
+            TIM8_TRG_COM: Handler = unhandled,
+            TIM8_CC: Handler = unhandled,
             ADC3: Handler = unhandled,
-            ///  FSMC global interrupt
             FSMC: Handler = unhandled,
-            ///  SDIO global interrupt
             SDIO: Handler = unhandled,
-            ///  TIM5 global interrupt
             TIM5: Handler = unhandled,
-            ///  SPI3 global interrupt
             SPI3: Handler = unhandled,
-            ///  UART4 global interrupt
             UART4: Handler = unhandled,
-            ///  UART5 global interrupt
             UART5: Handler = unhandled,
-            ///  TIM6 global interrupt
             TIM6: Handler = unhandled,
-            ///  TIM7 global interrupt
             TIM7: Handler = unhandled,
-            ///  DMA2 Channel1 global interrupt
             DMA2_Channel1: Handler = unhandled,
+            DMA2_Channel2: Handler = unhandled,
+            DMA2_Channel3: Handler = unhandled,
+            DMA2_Channel4_5: Handler = unhandled,
         };
 
         pub const peripherals = struct {

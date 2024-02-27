@@ -1,5 +1,6 @@
 const hal = @import("hal/hal.zig");
 const GPIO = @import("hal/GPIO.zig");
+const int = @import("hal/interrupts.zig");
 
 pub const VectorTable = struct {
     pub fn NMI() void {}
@@ -15,12 +16,17 @@ pub fn main() !void {
     GPIO.enablePort(.A);
 
     const pin1 = GPIO.init(.A, 0);
-    pin1.setInputMode(.{}, null, null) catch return;
+    pin1.asInput(.{
+        .pull = .down,
+        .exti = GPIO.Exti.interrupt(.rising),
+    });
 
     const pin2 = GPIO.init(.C, 13);
-    pin2.setMode(.{
-        .output = .{},
-    });
+    pin2.asOutput(.{});
+
+    const i = int.DeviceInterrupt.TIM2;
+
+    i.setPriority(.{ .preemptive = 4, .sub = 1 });
 
     while (true) {
         pin2.toggle();

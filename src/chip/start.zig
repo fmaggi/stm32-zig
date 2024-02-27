@@ -80,7 +80,8 @@ fn _logFn(
     _ = args;
 }
 
-pub fn panic(_: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    std.log.err("{s}\n", .{message});
     if (@import("builtin").mode == .Debug) {
         @breakpoint();
     }

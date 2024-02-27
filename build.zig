@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "stm32-zig",
+        .name = "stm32-zig.elf",
         .root_source_file = .{ .path = "src/chip/start.zig" },
         .target = target,
         .optimize = optimize,
