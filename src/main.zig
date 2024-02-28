@@ -1,6 +1,7 @@
 const hal = @import("hal/hal.zig");
 const GPIO = @import("hal/GPIO.zig");
-const int = @import("hal/interrupts.zig");
+const clocks = @import("hal/clocks.zig");
+const interrupts = @import("hal/interrupts.zig");
 
 pub const VectorTable = struct {
     pub fn NMI() void {}
@@ -9,8 +10,15 @@ pub const VectorTable = struct {
     }
 };
 
+const config: clocks.Configuration = .{
+    .sys = clocks.PLL.fromHSI(.{}, 64_000_000).asOscillator(),
+    .apb1_frequency = 32_000_000,
+};
+
 pub fn main() !void {
     hal.init();
+
+    try config.apply();
 
     GPIO.enablePort(.C);
     GPIO.enablePort(.A);
@@ -23,10 +31,6 @@ pub fn main() !void {
 
     const pin2 = GPIO.init(.C, 13);
     pin2.asOutput(.{});
-
-    const i = int.DeviceInterrupt.TIM2;
-
-    i.setPriority(.{ .preemptive = 4, .sub = 1 });
 
     while (true) {
         pin2.toggle();

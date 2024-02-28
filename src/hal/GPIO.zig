@@ -158,18 +158,6 @@ pub fn setPull(gpio: GPIO, pull: Pull) void {
     }
 }
 
-pub fn interruptLine(gpio: GPIO) interrupts.DeviceInterrupt {
-    return switch (gpio.pin) {
-        0 => .EXTI0,
-        1 => .EXTI1,
-        2 => .EXTI2,
-        3 => .EXTI3,
-        4 => .EXTI4,
-        5, 6, 7, 8, 9 => .EXTI9_5,
-        10, 11, 12, 13, 14, 15 => .EXTI10_15,
-    };
-}
-
 pub const Exti = struct {
     pub const Edge = enum { rising, falling, both };
 
@@ -189,6 +177,7 @@ pub const Exti = struct {
 
     kind: enum { interrupt, event },
     edge: Edge,
+    priority: interrupts.Priority = .{},
 };
 
 pub fn setExti(gpio: GPIO, exti: Exti) void {
@@ -255,4 +244,20 @@ pub fn setExti(gpio: GPIO, exti: Exti) void {
     } else {
         EXTI.IMR.raw &= ~gpio.mask();
     }
+
+    const interrupt = gpio.interruptLine();
+    interrupt.setPriority(exti.priority);
+    interrupt.enable();
+}
+
+pub fn interruptLine(gpio: GPIO) interrupts.DeviceInterrupt {
+    return switch (gpio.pin) {
+        0 => .EXTI0,
+        1 => .EXTI1,
+        2 => .EXTI2,
+        3 => .EXTI3,
+        4 => .EXTI4,
+        5, 6, 7, 8, 9 => .EXTI9_5,
+        10, 11, 12, 13, 14, 15 => .EXTI15_10,
+    };
 }

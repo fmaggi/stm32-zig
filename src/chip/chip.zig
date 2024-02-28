@@ -4,7 +4,7 @@ pub const devices = struct {
     ///  STM32F103
     pub const STM32F103 = struct {
         pub const properties = struct {
-            pub const @"cpu.nvic_prio_bits" = 4;
+            pub const @"cpu.nvic_prio_bits" = "4";
             pub const @"cpu.endian" = "little";
             pub const @"cpu.revision" = "r1p1";
             pub const @"cpu.name" = "CM3";

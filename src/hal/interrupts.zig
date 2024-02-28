@@ -4,10 +4,32 @@ const chip = @import("chip");
 
 const SCB = chip.peripherals.SCB;
 const NVIC = chip.peripherals.NVIC;
-const NVIC_PRIO_BITS = chip.properties.@"cpu.nvic_prio_bits";
+const NVIC_PRIO_BITS = std.fmt.parseInt(u3, chip.properties.@"cpu.nvic_prio_bits", 10) catch unreachable;
 
-// TODO: Handle cortex m3 interrupts
-pub const DeviceInterrupt = enum(u16) {
+comptime {
+    std.debug.assert(NVIC_PRIO_BITS <= 4);
+}
+
+pub const CortexM3Interrupt = enum(u4) {
+    NonMaskableInt = 7,
+    HardFault = 8,
+    MemoryManagement = 9,
+    BusFault = 10,
+    UsageFault = 11,
+    SVCall = 12,
+    DebugMonitor = 13,
+    PendSV = 14,
+    SysTick = 15,
+
+    pub fn setPriority(interrupt: CortexM3Interrupt, priority: Priority) void {
+        const encoded = priority.encodeU16();
+        const index = @intFromEnum(interrupt) - 4;
+        var shps: [*]volatile u8 = @ptrCast(&SCB.SHPR1);
+        shps[index] = @truncate(encoded);
+    }
+};
+
+pub const DeviceInterrupt = enum(u8) {
     WWDG = 0,
     PVD = 1,
     TAMPER = 2,
@@ -71,14 +93,21 @@ pub const DeviceInterrupt = enum(u16) {
 
     pub fn enable(interrupt: DeviceInterrupt) void {
         var isers: [*]volatile u32 = @ptrCast(&NVIC.ISER0);
-        const index: u32 = @intFromEnum(interrupt);
-        isers[index >> 5] = @as(u32, 1) << (index & 0x1f);
+        const index = @intFromEnum(interrupt);
+
+        // Is this always true?
+        std.debug.assert((index >> 5) < 2);
+        isers[index >> 5] = @as(u32, 1) << @truncate(index & 0x1f);
     }
 
     pub fn setPriority(interrupt: DeviceInterrupt, priority: Priority) void {
-        const encoded: u16 = (@as(u16, priority.encode()) << (@as(u4, 8) - NVIC_PRIO_BITS));
+        const encoded = priority.encodeU16();
         const index: u32 = @intFromEnum(interrupt);
         var ips: [*]volatile u8 = @ptrCast(&NVIC.IPR0);
+
+        // Is this always true?
+        // 15 IPRs, each a u32
+        std.debug.assert(index < 15 * 4);
         ips[index] = @truncate(encoded & 0xff);
     }
 };
@@ -99,13 +128,19 @@ pub fn setNVICPriorityGroup(group: NVICPriorityGroup) void {
 }
 
 pub const Priority = packed struct(u8) {
-    preemptive: u4,
-    sub: u4,
+    preemptive: u4 = 0,
+    sub: u4 = 0,
+
+    pub inline fn encodeU16(priority: Priority) u16 {
+        return (@as(u16, priority.encode()) << (@as(u4, 8) - NVIC_PRIO_BITS));
+    }
 
     pub fn encode(priority: Priority) u8 {
+        // NOTE: I think this breaks if NVIC_PRIO_BITS > 4
+
         const grouping = SCB.AIRCR.read().PRIGROUP;
         // grouping -> [0, 7]
-        // NVIC_PRIO_BITS -> 4
+        // NVIC_PRIO_BITS -> N
         // 7 - [0-7] -> [7, 0]
         // preempt_bits -> [0, 4]
         const preempt_bits: u3 = if (@as(u3, 7) - grouping > NVIC_PRIO_BITS)
@@ -132,7 +167,7 @@ pub const Priority = packed struct(u8) {
         const high: u8 = h_blk: {
             const mask: u4 = @truncate((@as(u5, 1) << preempt_bits) - 1);
             const high = priority.preemptive & mask;
-            break :h_blk @as(u8, high) << sub_bits;
+            break :h_blk @as(u8, high);
         };
 
         const low: u8 = l_blk: {
@@ -141,6 +176,6 @@ pub const Priority = packed struct(u8) {
             break :l_blk @as(u8, low);
         };
 
-        return high | low;
+        return (high << sub_bits) | low;
     }
 };
