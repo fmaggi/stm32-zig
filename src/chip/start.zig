@@ -10,6 +10,7 @@ pub const VectorTable = STM32F103.VectorTable;
 pub const properties = STM32F103.properties;
 
 const app = @import("app");
+const hal = @import("hal");
 
 export fn _start() noreturn {
     // NOTE: for some reason @memcpy and @memset bloat the binary and it doesn't fit in .text
@@ -46,17 +47,10 @@ export fn _start() noreturn {
 
     const return_type = info.return_type orelse @compileError("Unkown main return type");
 
-    switch (@typeInfo(return_type)) {
-        .ErrorUnion => app.main() catch @panic("!"),
-        .Void => app.main(),
-        .Int => {
-            const ret_val = app.main();
-            if (ret_val != 0) {
-                @panic("!");
-            }
-        },
-        else => @compileError("Invalid main return type: " ++ @typeName(return_type)),
-    }
+    if (return_type != void)
+        @compileError("Main function needs to return void");
+
+    app.main();
 
     while (true) {}
 }
@@ -106,39 +100,55 @@ fn wrap(comptime func: anytype) fn () callconv(.C) void {
 }
 
 export const vector: VectorTable linksection(".isr_vector") = blk: {
+    if (@hasDecl(hal, "VectorTable")) {
+        break :blk createVectorTable(hal.VectorTable);
+    }
+
+    if (@hasDecl(app, "VectorTable")) {
+        break :blk createVectorTable(app.VectorTable);
+    }
+
+    const RAM = memory.RAM;
+    break :blk .{
+        .initial_stack_pointer = RAM.start + RAM.length,
+        .Reset = .{ .C = _start },
+    };
+};
+
+fn createVectorTable(comptime vector_table: type) VectorTable {
     const RAM = memory.RAM;
     const Handler = VectorTable.Handler;
-    var _vector: VectorTable = .{
+    var vt: VectorTable = .{
         .initial_stack_pointer = RAM.start + RAM.length,
         .Reset = .{ .C = _start },
     };
 
-    if (@hasDecl(app, "VectorTable")) {
-        const main_vector = app.VectorTable;
+    if (@hasDecl(vector_table, "initial_stack_pointer"))
+        @compileError("Cannot override initial stack pointer");
 
-        if (@hasDecl(main_vector, "initial_stack_pointer"))
-            @compileError("main cannot override initial stack pointer");
+    if (@hasDecl(vector_table, "Reset"))
+        @compileError("Cannot override Reset vector");
 
-        if (@hasDecl(main_vector, "Reset"))
-            @compileError("main cannot override Reset vector");
+    for (@typeInfo(vector_table).Struct.decls) |decl| {
+        if (@hasField(VectorTable, decl.name)) {
+            const v = @field(vector_table, decl.name);
 
-        for (@typeInfo(main_vector).Struct.decls) |decl| {
-            if (@hasField(VectorTable, decl.name)) {
-                const v = @field(main_vector, decl.name);
-                const info: std.builtin.Type.Fn = @typeInfo(@TypeOf(v)).Fn;
-                const handler: Handler = switch (info.calling_convention) {
-                    .C => .{ .C = v },
-                    .Naked => .{ .Naked = v },
-                    .Unspecified => .{ .C = wrap(v) },
-                    else => @compileError("Invalid calling convention on " ++ decl.name ++ ". Use .C or .Naked"),
-                };
+            const info = @typeInfo(@TypeOf(v));
+            if (info != .Fn) continue;
 
-                @field(_vector, decl.name) = handler;
-            } else {
-                @compileError("Unkown interrupt vector: " ++ decl.name);
-            }
+            const fn_info = @typeInfo(@TypeOf(v)).Fn;
+            const handler: Handler = switch (fn_info.calling_convention) {
+                .C => .{ .C = v },
+                .Naked => .{ .Naked = v },
+                .Unspecified => .{ .C = wrap(v) },
+                else => @compileError("Invalid calling convention on " ++ decl.name ++ ". Use .C or .Naked"),
+            };
+
+            @field(vt, decl.name) = handler;
+        } else {
+            @compileError("Unkown interrupt vector: " ++ decl.name);
         }
     }
 
-    break :blk _vector;
-};
+    return vt;
+}

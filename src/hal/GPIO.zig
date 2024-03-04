@@ -3,26 +3,25 @@ const std = @import("std");
 const chip = @import("chip");
 const interrupts = @import("interrupts.zig");
 
-const Port = chip.types.peripherals.GPIOA;
-
 const RCC = chip.peripherals.RCC;
 const AFIO = chip.peripherals.AFIO;
 const EXTI = chip.peripherals.EXTI;
 
-const GPIOA = chip.peripherals.GPIOA;
-const GPIOB = chip.peripherals.GPIOB;
-const GPIOC = chip.peripherals.GPIOC;
-const GPIOD = chip.peripherals.GPIOD;
-const GPIOE = chip.peripherals.GPIOE;
-const GPIOF = chip.peripherals.GPIOF;
-const GPIOG = chip.peripherals.GPIOG;
-
 const GPIO = @This();
 
-port: *volatile Port,
+port: *volatile Port.Registers,
 pin: u4,
 
-pub const PortName = enum(u3) {
+pub const Port = enum(u3) {
+    pub const Registers = chip.types.peripherals.GPIOA;
+    pub const A = chip.peripherals.GPIOA;
+    pub const B = chip.peripherals.GPIOB;
+    pub const C = chip.peripherals.GPIOC;
+    pub const D = chip.peripherals.GPIOD;
+    pub const E = chip.peripherals.GPIOE;
+    pub const F = chip.peripherals.GPIOF;
+    pub const G = chip.peripherals.GPIOG;
+
     A,
     B,
     C,
@@ -30,45 +29,60 @@ pub const PortName = enum(u3) {
     E,
     F,
     G,
+
+    pub fn enable(port: Port) void {
+        const offset = @intFromEnum(port) + 2;
+        const bit = @as(u32, 1) << offset;
+        RCC.APB2ENR.raw |= bit;
+        // Delay after setting
+        _ = RCC.APB2ENR.raw & bit;
+    }
+
+    pub fn fromRegisters(pointer: *const volatile Registers) Port {
+        return switch (@intFromPtr(pointer)) {
+            @intFromPtr(A) => .A,
+            @intFromPtr(B) => .B,
+            @intFromPtr(C) => .C,
+            @intFromPtr(D) => .D,
+            @intFromPtr(E) => .E,
+            @intFromPtr(F) => .F,
+            @intFromPtr(G) => .G,
+            else => unreachable,
+        };
+    }
+
+    pub fn registers(port: Port) *volatile Registers {
+        return switch (port) {
+            .A => A,
+            .B => B,
+            .C => C,
+            .D => D,
+            .E => E,
+            .F => F,
+            .G => G,
+        };
+    }
 };
 
-pub fn enablePort(port: PortName) void {
-    const offset = @intFromEnum(port) + 2;
-    const bit = @as(u32, 1) << offset;
-    RCC.APB2ENR.raw |= bit;
-    // Delay after setting
-    _ = RCC.APB2ENR.raw & bit;
-}
-
-pub fn init(port: PortName, pin: u4) GPIO {
-    const p = switch (port) {
-        .A => GPIOA,
-        .B => GPIOB,
-        .C => GPIOC,
-        .D => GPIOD,
-        .E => GPIOE,
-        .F => GPIOF,
-        .G => GPIOG,
-    };
-
+pub fn init(port: Port, pin: u4) GPIO {
     return .{
-        .port = p,
+        .port = port.registers(),
         .pin = pin,
     };
 }
 
-pub inline fn read(gpio: GPIO) u1 {
+pub fn read(gpio: GPIO) u1 {
     return @intFromBool((gpio.port.IDR.raw & gpio.mask()) != 0);
 }
 
-pub inline fn write(gpio: GPIO, value: u1) void {
+pub fn write(gpio: GPIO, value: u1) void {
     switch (value) {
         0 => gpio.port.BSRR.raw = gpio.mask() << 16,
         1 => gpio.port.BSRR.raw = gpio.mask(),
     }
 }
 
-pub inline fn toggle(gpio: GPIO) void {
+pub fn toggle(gpio: GPIO) void {
     gpio.port.ODR.raw ^= gpio.mask();
 }
 
@@ -76,55 +90,64 @@ pub inline fn mask(gpio: GPIO) u16 {
     return @as(u16, 1) << gpio.pin;
 }
 
-/// For input
-///     MODE[1:0] = 00
-///     CNF[1:0] kind
-pub const Input = packed struct(u4) {
-    reserved: u2 = 0,
-    kind: enum(u2) { analog, floating, pull } = .floating, // CNF
-};
-
-pub const InputOptions = struct {
-    config: Input = .{},
-    pull: ?Pull = null,
-    exti: ?Exti = null,
+pub const InputOptions = union(enum) {
+    analog,
+    floating,
+    pull: Pull,
+    exti: struct {
+        config: Exti,
+        pull: ?Pull = null,
+    },
 };
 
 pub fn asInput(gpio: GPIO, options: InputOptions) void {
-    std.debug.assert(options.config.reserved == 0);
-    // Should I do this?
-    if (options.pull) |pull| {
-        gpio.setConfig(.{ .input = .{ .kind = .pull } });
-        gpio.setPull(pull);
-    } else {
-        gpio.setConfig(.{ .input = options.config });
-    }
+    switch (options) {
+        .analog => gpio.setConfig(.{ .input = .{ .kind = .analog } }),
+        .floating => gpio.setConfig(.{ .input = .{ .kind = .floating } }),
+        .pull => |pull| {
+            gpio.setConfig(.{ .input = .{ .kind = .pull } });
+            gpio.setPull(pull);
+        },
+        .exti => |exti| {
+            if (exti.pull) |pull| {
+                gpio.setConfig(.{ .input = .{ .kind = .pull } });
+                gpio.setPull(pull);
+            } else {
+                gpio.setConfig(.{ .input = .{ .kind = .floating } });
+            }
 
-    if (options.exti) |e| {
-        gpio.setExti(e);
+            gpio.setExti(exti.config);
+        },
     }
 }
 
 /// For output
 ///     MODE[1:0] speed
 ///     CNF[1:0] drain and function
-pub const Output = packed struct(u4) {
+pub const OutputOptions = packed struct(u4) {
     speed: enum(u2) { reserved, s10MHz, s2MHz, s50MHz } = .s2MHz, // MODE
     drain: enum(u1) { push_pull, open } = .push_pull, // CFN[0]
     function: enum(u1) { general_purpose, alternate } = .general_purpose, // CNF[1]
 };
 
-pub fn asOutput(gpio: GPIO, config: Output) void {
-    std.debug.assert(config.speed != .reserved);
-    gpio.setConfig(.{ .output = config });
+pub fn asOutput(gpio: GPIO, options: OutputOptions) void {
+    std.debug.assert(options.speed != .reserved);
+    gpio.setConfig(.{ .output = options });
 }
 
 /// Config registers
 ///     [ CNF[1:0] | MODE[1:0] ]
 ///     4          2           0
 pub const Config = packed union {
-    input: Input,
-    output: Output,
+    comptime {
+        std.debug.assert(@bitSizeOf(Config) == 4);
+    }
+
+    input: packed struct(u4) {
+        reserved: u2 = 0,
+        kind: enum(u2) { analog, floating, pull, reserved } = .floating,
+    },
+    output: OutputOptions,
 
     pub fn isInput(config: Config) bool {
         const info: u4 = @bitCast(config);
@@ -159,41 +182,14 @@ pub fn setPull(gpio: GPIO, pull: Pull) void {
 }
 
 pub const Exti = struct {
-    pub const Edge = enum { rising, falling, both };
-
-    pub fn interrupt(edge: Edge) Exti {
-        return .{
-            .kind = .interrupt,
-            .edge = edge,
-        };
-    }
-
-    pub fn event(edge: Edge) Exti {
-        return .{
-            .kind = .event,
-            .edge = edge,
-        };
-    }
-
     kind: enum { interrupt, event },
-    edge: Edge,
+    edge: enum { rising, falling, both },
     priority: interrupts.Priority = .{},
 };
 
 pub fn setExti(gpio: GPIO, exti: Exti) void {
     RCC.APB2ENR.modify(.{ .AFIOEN = 1 });
     _ = RCC.APB2ENR.read().AFIOEN;
-
-    const port: u4 = switch (@intFromPtr(gpio.port)) {
-        @intFromPtr(GPIOA) => 0,
-        @intFromPtr(GPIOB) => 1,
-        @intFromPtr(GPIOC) => 2,
-        @intFromPtr(GPIOD) => 3,
-        @intFromPtr(GPIOE) => 4,
-        @intFromPtr(GPIOF) => 5,
-        @intFromPtr(GPIOG) => 6,
-        else => unreachable,
-    };
 
     // pin 0  -> EXTICR1 -> 0
     // pin 1  -> EXTICR1 -> 1
@@ -214,8 +210,9 @@ pub fn setExti(gpio: GPIO, exti: Exti) void {
     const cr_index: u2 = @truncate(gpio.pin >> 2);
     const index: u2 = @truncate(gpio.pin & 0b11);
 
-    const control_registers: [*]volatile @TypeOf(AFIO.EXTICR1) = @ptrCast(&AFIO.EXTICR1);
-    var control_register: [*]volatile u4 = @ptrCast(&control_registers[cr_index]);
+    const port = @intFromEnum(Port.fromRegisters(gpio.port));
+    const control_registers: *volatile [4]@TypeOf(AFIO.EXTICR1) = @ptrCast(&AFIO.EXTICR1);
+    var control_register: *volatile [4]u4 = @ptrCast(&control_registers[cr_index]);
     control_register[index] = port;
 
     const rising = exti.edge == .rising or exti.edge == .both;

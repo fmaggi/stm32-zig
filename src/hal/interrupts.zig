@@ -24,7 +24,7 @@ pub const CortexM3Interrupt = enum(u4) {
     pub fn setPriority(interrupt: CortexM3Interrupt, priority: Priority) void {
         const encoded = priority.encodeU16();
         const index = @intFromEnum(interrupt) - 4;
-        var shps: [*]volatile u8 = @ptrCast(&SCB.SHPR1);
+        var shps: *volatile [12]u8 = @ptrCast(&SCB.SHPR1);
         shps[index] = @truncate(encoded);
     }
 };
@@ -92,22 +92,15 @@ pub const DeviceInterrupt = enum(u8) {
     DMA2_Channel4_5 = 59,
 
     pub fn enable(interrupt: DeviceInterrupt) void {
-        var isers: [*]volatile u32 = @ptrCast(&NVIC.ISER0);
+        var isers: *volatile [2]u32 = @ptrCast(&NVIC.ISER0);
         const index = @intFromEnum(interrupt);
-
-        // Is this always true?
-        std.debug.assert((index >> 5) < 2);
         isers[index >> 5] = @as(u32, 1) << @truncate(index & 0x1f);
     }
 
     pub fn setPriority(interrupt: DeviceInterrupt, priority: Priority) void {
         const encoded = priority.encodeU16();
         const index: u32 = @intFromEnum(interrupt);
-        var ips: [*]volatile u8 = @ptrCast(&NVIC.IPR0);
-
-        // Is this always true?
-        // 15 IPRs, each a u32
-        std.debug.assert(index < 15 * 4);
+        var ips: *volatile [15 * 4]u8 = @ptrCast(&NVIC.IPR0);
         ips[index] = @truncate(encoded & 0xff);
     }
 };

@@ -1,39 +1,73 @@
-const hal = @import("hal/hal.zig");
-const GPIO = @import("hal/GPIO.zig");
-const clocks = @import("hal/clocks.zig");
-const interrupts = @import("hal/interrupts.zig");
+const hal = @import("hal");
+const GPIO = hal.GPIO;
+const clocks = hal.clocks;
+const interrupts = hal.interrupts;
+const ADC = hal.ADC;
 
-pub const VectorTable = struct {
-    pub fn NMI() void {}
-    pub fn HardFault() void {
-        @panic("Hard fault");
+const config: clocks.Config = .{
+    .sys = clocks.PLL.fromHSI(.{}, 64_000_000).asOscillator(),
+    .pclk1_frequency = 32_000_000,
+    .pclk2_frequency = 32_000_000,
+    .adc_frequency = 4_000_000,
+};
+
+var gpio0_clicked = false;
+
+pub const Callbacks = struct {
+    pub fn GPIO0() void {
+        gpio0_clicked = true;
+    }
+
+    pub fn GPIO10() void {
+        const pin = GPIO.init(.C, 10);
+        pin.toggle();
+    }
+
+    pub fn GPIO13() void {
+        const pin = GPIO.init(.C, 11);
+        pin.toggle();
     }
 };
 
-const config: clocks.Configuration = .{
-    .sys = clocks.PLL.fromHSI(.{}, 64_000_000).asOscillator(),
-    .apb1_frequency = 32_000_000,
-};
-
-pub fn main() !void {
+pub fn main() void {
     hal.init();
 
-    try config.apply();
+    config.apply(.{}) catch return;
 
-    GPIO.enablePort(.C);
-    GPIO.enablePort(.A);
+    GPIO.Port.enable(.C);
+    GPIO.Port.enable(.A);
 
     const pin1 = GPIO.init(.A, 0);
     pin1.asInput(.{
-        .pull = .down,
-        .exti = GPIO.Exti.interrupt(.rising),
+        .exti = .{
+            .config = .{
+                .kind = .interrupt,
+                .edge = .rising,
+            },
+            .pull = .down,
+        },
     });
 
-    const pin2 = GPIO.init(.C, 13);
-    pin2.asOutput(.{});
+    const led = GPIO.init(.C, 13);
+    led.asOutput(.{});
+
+    const adc = ADC.ADC1;
+    adc.setConfig(.{
+        .channels = &[_]ADC.Channel{
+            .{ .number = 0 },
+        },
+    });
 
     while (true) {
-        pin2.toggle();
+        adc.start() catch continue;
+        const value = adc.poll(null) catch return orelse continue;
+        if (value > 1000) {
+            led.toggle();
+        }
+
+        if (gpio0_clicked) {
+            led.toggle();
+            gpio0_clicked = false;
+        }
     }
-    // return 0;
 }
