@@ -49,7 +49,7 @@ pub const Config = struct {
     pclk2_frequency: ?u32 = null,
     adc_frequency: ?u32 = null,
 
-    pub fn apply(comptime config: Config, comptime timeouts: Timeouts) ConfigError!void {
+    pub inline fn apply(comptime config: Config, comptime timeouts: Timeouts) ConfigError!void {
         const checked = comptime config.check();
         try checked.apply(timeouts);
     }
@@ -69,14 +69,14 @@ pub const Config = struct {
 
         return .{
             .sys = config.sys,
-            .pll = comptime config.getPLL(),
-            .hsi = comptime config.getHSI(),
-            .hse = comptime config.getHSE(),
-            .hpre = comptime config.getHPRE(),
-            .ppre1 = comptime config.getPPRE1(),
-            .ppre2 = comptime config.getPPRE2(),
+            .pll = config.getPLL(),
+            .hsi = config.getHSI(),
+            .hse = config.getHSE(),
+            .hpre = config.getHPRE(),
+            .ppre1 = config.getPPRE1(),
+            .ppre2 = config.getPPRE2(),
             .latency = latency,
-            .adcpre = comptime config.getADCPRE(),
+            .adcpre = config.getADCPRE(),
         };
     }
 
@@ -275,7 +275,7 @@ const CheckedConfig = struct {
         {
             // Make sure sys source is on
             const delay = time.timeout_ms(timeouts.sys);
-            while (config.sys.isOn()) {
+            while (!config.sys.isOn()) {
                 if (delay.isReached()) return ConfigError.TimeoutSys;
             }
         }
@@ -312,6 +312,11 @@ const CheckedConfig = struct {
 
         if (config.hsi == null) {
             try HSI.turnOff(timeouts.hsi);
+        }
+
+        if (config.latency > FLASH.ACR.read().LATENCY) {
+            FLASH.ACR.modify(.{ .LATENCY = config.latency });
+            if (FLASH.ACR.read().LATENCY != config.latency) return ConfigError.FailedToSetLatency;
         }
 
         hal.configTick();
@@ -406,14 +411,14 @@ pub const PLL = struct {
     frequency: u32,
     multiplier: ?u4 = null,
 
-    pub fn fromHSI(hsi: HSI, frequency: u32) PLL {
+    pub fn fromHSI(frequency: u32, hsi: HSI) PLL {
         return .{
             .source = .{ .hsi_div2 = hsi },
             .frequency = frequency,
         };
     }
 
-    pub fn fromHSE(hse: HSE, div2: bool, frequency: u32) PLL {
+    pub fn fromHSE(frequency: u32, hse: HSE, div2: bool) PLL {
         const s: Source = if (div2)
             .{ .hse_div2 = hse }
         else

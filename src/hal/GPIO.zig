@@ -77,8 +77,8 @@ pub fn read(gpio: GPIO) u1 {
 
 pub fn write(gpio: GPIO, value: u1) void {
     switch (value) {
-        0 => gpio.port.BSRR.raw = gpio.mask() << 16,
-        1 => gpio.port.BSRR.raw = gpio.mask(),
+        0 => gpio.port.BSRR.raw = @as(u32, gpio.mask()) << 16,
+        1 => gpio.port.BSRR.raw = @as(u32, gpio.mask()),
     }
 }
 

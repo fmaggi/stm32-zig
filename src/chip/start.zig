@@ -12,15 +12,12 @@ pub const properties = STM32F103.properties;
 const app = @import("app");
 const hal = @import("hal");
 
-export fn _start() noreturn {
-    // NOTE: for some reason @memcpy and @memset bloat the binary and it doesn't fit in .text
+pub export fn _start() callconv(.C) noreturn {
 
     // fill .bss with zeroes
     {
-        @setRuntimeSafety(false);
         const bss_start: [*]u8 = @ptrCast(&sections._start_bss);
-        const bss_end: [*]u8 = @ptrCast(&sections._end_bss);
-        const bss_len = @intFromPtr(bss_end) - @intFromPtr(bss_start);
+        const bss_len = @intFromPtr(&sections._size_bss);
 
         for (0..bss_len) |i| {
             bss_start[i] = 0;
@@ -29,26 +26,14 @@ export fn _start() noreturn {
 
     // load .data from flash
     {
-        @setRuntimeSafety(false);
         const data_start: [*]u8 = @ptrCast(&sections._start_data);
-        const data_end: [*]u8 = @ptrCast(&sections._end_data);
-        const data_len = @intFromPtr(data_end) - @intFromPtr(data_start);
-        const data_src: [*]const u8 = @ptrCast(&sections._start_load_data);
+        const data_len = @intFromPtr(&sections._size_data);
+        const data_src: [*]const u8 = @ptrCast(&sections._end_text);
 
         for (0..data_len) |i| {
             data_start[i] = data_src[i];
         }
     }
-
-    const info: std.builtin.Type.Fn = @typeInfo(@TypeOf(app.main)).Fn;
-
-    if (info.params.len > 0)
-        @compileError("Main function needs to have 0 parameters");
-
-    const return_type = info.return_type orelse @compileError("Unkown main return type");
-
-    if (return_type != void)
-        @compileError("Main function needs to return void");
 
     app.main();
 
@@ -83,11 +68,11 @@ pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noretu
 }
 
 const sections = struct {
-    extern var _start_load_data: u8;
+    extern var _end_text: u8;
     extern var _start_data: u8;
-    extern var _end_data: u8;
+    extern var _size_data: u8;
     extern var _start_bss: u8;
-    extern var _end_bss: u8;
+    extern var _size_bss: u8;
 };
 
 fn wrap(comptime func: anytype) fn () callconv(.C) void {
@@ -110,7 +95,7 @@ export const vector: VectorTable linksection(".isr_vector") = blk: {
 
     const RAM = memory.RAM;
     break :blk .{
-        .initial_stack_pointer = RAM.start + RAM.length,
+        .initial_stack_pointer = RAM.start + RAM.length - 8,
         .Reset = .{ .C = _start },
     };
 };
@@ -119,7 +104,7 @@ fn createVectorTable(comptime vector_table: type) VectorTable {
     const RAM = memory.RAM;
     const Handler = VectorTable.Handler;
     var vt: VectorTable = .{
-        .initial_stack_pointer = RAM.start + RAM.length,
+        .initial_stack_pointer = RAM.start + RAM.length - 8,
         .Reset = .{ .C = _start },
     };
 

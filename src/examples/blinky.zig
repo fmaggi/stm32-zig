@@ -1,12 +1,15 @@
 const hal = @import("hal");
 const time = hal.time;
+const clocks = hal.clocks;
 const GPIO = hal.GPIO;
 
 pub fn main() void {
-    hal.reset();
+    hal.init();
 
     GPIO.Port.enable(.C);
     const led = GPIO.init(.C, 13);
+
+    led.asOutput(.{});
 
     while (true) {
         led.toggle();

@@ -4,8 +4,10 @@ const clocks = @import("clocks.zig");
 
 const hal = @import("hal.zig");
 
+const SCALE = if (@import("builtin").mode == .Debug) 20 else 1;
+
 pub fn delay_us(us: u32) void {
-    var wait_loop_index = us * (clocks.systemCoreClockFrequency() / 1_000_000);
+    var wait_loop_index = us * (clocks.systemCoreClockFrequency() / 1_000_000) / SCALE;
     while (wait_loop_index != 0) {
         wait_loop_index -= 1;
     }

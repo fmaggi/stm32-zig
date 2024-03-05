@@ -36,14 +36,14 @@ pub const Config = struct {
     };
 
     pub const Trigger = enum(u3) {
-        TIM1_CC1,
-        TIM1_CC2,
-        TIM1_CC3,
-        TIM2_CC2,
-        TIM3_TRGO,
-        TIM4_CC4,
-        EXTI_11,
-        SOFTWARE,
+        TIM1_CC1 = 0,
+        TIM1_CC2 = 1,
+        TIM1_CC3 = 2,
+        TIM2_CC2 = 3,
+        TIM3_TRGO = 4,
+        TIM4_CC4 = 5,
+        EXTI_11 = 6,
+        SOFTWARE = 7,
     };
 
     pub const Error = error{
@@ -122,7 +122,7 @@ pub fn setConfigUnchecked(adc: ADC, config: Config) void {
     });
 
     for (config.channels, 0..) |channel, rank| {
-        adc.configChannel(channel, @truncate(rank)) catch unreachable;
+        adc.configChannel(channel, @truncate(rank)) catch continue;
     }
 }
 
@@ -132,6 +132,7 @@ pub fn configChannel(adc: ADC, channel: Channel, rank: u5) error{InvalidChannel}
     // but they are only available in ADC1
     // so we need to handle them too
     if (!channel.isValid()) return error.InvalidChannel;
+
     {
         const mask: u32 = @as(u32, 0b11111) << rank;
         const value: u32 = @as(u32, channel.number) << rank;
@@ -173,31 +174,20 @@ pub fn start(adc: ADC) !void {
 
     adc.registers.SR.modify(.{ .EOC = 0 });
 
-    adc.registers.CR2.modify(.{
-        .SWSTART = 1,
-        .EXTTRIG = 1,
-    });
-
-    // C HAL does it like this, but it think the above should work
-    // As the regerence manual says SWSTART triggers the conversion
-    // IF ADC is configed as softwar triggered
-    //
-    // if (adc.isSoftwareTriggered()) {
-    //     adc.registers.CR2.modify(.{
-    //         .SWSTART = 1,
-    //         .EXTTRIG = 1,
-    //     });
-    // } else {
-    //     adc.registers.CR2.modify(.{ .EXTTRIG = 1 });
-    // }
+    if (adc.isSoftwareTriggered()) {
+        adc.registers.CR2.modify(.{
+            .SWSTART = 1,
+            .EXTTRIG = 1,
+        });
+    } else {
+        adc.registers.CR2.modify(.{ .EXTTRIG = 1 });
+    }
 }
 
-pub const PollError = error{PolledWithDMA};
-
 /// On timeout returns null
-pub fn poll(adc: ADC, timeout: ?u32) PollError!?u16 {
+pub fn poll(adc: ADC, timeout: ?u32) error{ PolledDMA, Timeout }!?u16 {
     if (adc.registers.CR2.read().DMA == 1) {
-        return PollError.PolledWithDMA;
+        return error.PolledDMA;
     }
 
     if (adc.isSingleConversion()) {
@@ -234,8 +224,6 @@ fn enable(adc: ADC) !void {
     while (adc.registers.CR2.read().ADON == 1) {
         if (delay.isReached()) return error.Timeout;
     }
-
-    return;
 }
 
 pub fn isSingleConversion(adc: ADC) bool {
@@ -274,7 +262,8 @@ pub const Channel = packed struct(u8) {
         @"239.5",
     } = .@"1.5",
 
-    pub inline fn port(channel: Channel) u1 {
+    pub inline fn port(channel: Channel) ?u1 {
+        if (channel.number > 9) return null;
         return @truncate(channel.number >> 3);
     }
 
@@ -291,9 +280,8 @@ fn enableGPIOs(channels: []const Channel) void {
     var ports: [2]bool = [_]bool{false} ** 2;
     var gpios: [10]bool = [_]bool{false} ** 10;
     for (channels) |channel| {
-        const port = channel.port();
+        const port = channel.port() orelse continue;
         const index = channel.number;
-        std.debug.assert(index <= 9);
 
         if (!ports[port]) {
             GPIO.Port.enable(@enumFromInt(port));

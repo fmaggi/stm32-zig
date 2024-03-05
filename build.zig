@@ -1,6 +1,55 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const build_examples = b.option(bool, "examples", "Build examples (default = false)") orelse false;
+    if (build_examples) {
+        buildExamples(b);
+    } else {
+        buildTest(b);
+    }
+
+    const args = b.args orelse &[_][]const u8{""};
+    const name = args[0];
+    const formatted_name = b.fmt("zig-out/bin/stm32-zig-{s}.elf", .{name});
+    const flash_cmd = b.addSystemCommand(&.{
+        "/home/fran/.local/stm32/STM32CubeProgrammer/bin/STM32_Programmer_CLI",
+        "-c",
+        "port=SWD",
+        "mode=UR",
+        "reset=HWrst",
+        "-w",
+        formatted_name,
+        "--verify",
+    });
+
+    const flash_step = b.step("flash", "Flash the program");
+    flash_step.dependOn(&flash_cmd.step);
+
+    const server_cmd = b.addSystemCommand(&.{
+        "ST-LINK_gdbserver",                                "-p", "61234", "-l", "1",      "-d", "-z", "61235", "-s", "-cp",
+        "/home/fran/.local/stm32/STM32CubeProgrammer/bin/", "-m", "0",     "-k", "--halt",
+    });
+    server_cmd.step.dependOn(&flash_cmd.step);
+    const server_step = b.step("server", "server");
+    server_step.dependOn(&server_cmd.step);
+
+    const debugger_cmd = b.addSystemCommand(&.{
+        "arm-none-eabi-gdb", formatted_name,
+    });
+
+    const debug_step = b.step("debug", "Debug the program");
+    debug_step.dependOn(&debugger_cmd.step);
+
+    // debug: flash
+    // 	ST-LINK_gdbserver -p 61234 -l 1 -d -z 61235 -s -cp $(PROGRAMMER_DIR) -m 0 -k --halt &
+    // 	arm-none-eabi-gdb $(TARGET) -ex "target remote localhost:61234"
+    //
+    // clean:
+    // 	make -C Debug -j4 clean
+    //
+}
+
+pub fn buildTest(b: *std.Build) void {
     const target = b.resolveTargetQuery(.{
         .cpu_arch = .thumb,
         .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m3 },
@@ -26,16 +75,12 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .path = "src/chip/start.zig" },
         .target = target,
         .optimize = optimize,
-        .code_model = .small,
         .linkage = .static,
-        .single_threaded = true,
-        .pic = false,
     });
 
     exe.link_gc_sections = true;
     exe.link_data_sections = true;
     exe.link_function_sections = true;
-    exe.pie = false;
 
     exe.root_module.addImport("app", app);
     exe.root_module.addImport("hal", hal);
@@ -52,7 +97,7 @@ pub fn build(b: *std.Build) void {
 }
 
 pub fn buildExamples(b: *std.Build) void {
-    const examples = &.{"blinky"};
+    const examples: []const []const u8 = &.{"blinky"};
 
     const target = b.resolveTargetQuery(.{
         .cpu_arch = .thumb,
@@ -69,8 +114,8 @@ pub fn buildExamples(b: *std.Build) void {
     });
 
     for (examples) |example| {
-        const source = b.fmt("src/examples/{}.zig", .{example});
-        const artifact = b.fmt("stm32-zig-{}.elf", .{example});
+        const source = b.fmt("src/examples/{s}.zig", .{example});
+        const artifact = b.fmt("stm32-zig-{s}.elf", .{example});
         const app = b.addModule(example, .{
             .root_source_file = .{ .path = source },
             .target = target,
@@ -82,16 +127,11 @@ pub fn buildExamples(b: *std.Build) void {
             .root_source_file = .{ .path = "src/chip/start.zig" },
             .target = target,
             .optimize = optimize,
-            .code_model = .small,
-            .linkage = .static,
-            .single_threaded = true,
-            .pic = false,
         });
 
         exe.link_gc_sections = true;
         exe.link_data_sections = true;
         exe.link_function_sections = true;
-        exe.pie = false;
 
         exe.root_module.addImport("hal", hal);
         exe.root_module.addImport("app", app);

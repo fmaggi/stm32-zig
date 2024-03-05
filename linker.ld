@@ -1,108 +1,59 @@
-ENTRY(_start)
-
-/* Memories definition */
 MEMORY
 {
-    RAM    (xrw)    : ORIGIN = 0x20000000,  LENGTH = 20K
-    FLASH   (rx)    : ORIGIN = 0x8000000,   LENGTH = 64K
+    FLASH (rx)    : ORIGIN = 0x08000000, LENGTH = 64K
+    RAM (rxw)     : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
-/* Highest address of the user mode stack */
-_Min_Heap_Size = 0x200 ; /* required amount of heap */
-_Min_Stack_Size = 0x400 ; /* required amount of stack */
+STACK_SIZE = 256;
+HEAP_SIZE  = 256;
 
+ENTRY(_start)
 
-/* Sections */
-SECTIONS
-{
-  /* The startup code into "FLASH" Rom type memory */
-  .isr_vector :
-  {
-    . = ALIGN(4);
-    KEEP(*(.isr_vector)) /* Startup code */
-    . = ALIGN(4);
-  } >FLASH
+SECTIONS {
+    .text : {
+        KEEP(*(.isr_vector))
+        *(.text)
+        *(.text*)
+        *(.rodata)
+        *(.rodata*)
+        . = ALIGN(4);
+    } > FLASH
 
-  /* The program code and other data into "FLASH" Rom type memory */
-  .text :
-  {
-    . = ALIGN(4);
-    *(.text)           /* .text sections (code) */
-    *(.text*)          /* .text* sections (code) */
-    *(.glue_7)         /* glue arm to thumb code */
-    *(.glue_7t)        /* glue thumb to arm code */
-    *(.eh_frame)
-
-    . = ALIGN(4);
-    _end_text = .;        /* define a global symbols at end of code */
-  } >FLASH
-
-  /* Constant data into "FLASH" Rom type memory */
-  .rodata :
-  {
-    . = ALIGN(4);
-    *(.rodata)         /* .rodata sections (constants, strings, etc.) */
-    *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
-    . = ALIGN(4);
-  } >FLASH
-
-  .ARM.extab   : {
-    . = ALIGN(4);
-    *(.ARM.extab* .gnu.linkonce.armextab.*)
-    . = ALIGN(4);
-  } >FLASH
-
-  .ARM : {
-    . = ALIGN(4);
     __exidx_start = .;
-    *(.ARM.exidx*)
+    .ARM.exidx : {
+        *(.ARM.exidx*)
+        . = ALIGN(4);
+    } > FLASH
     __exidx_end = .;
-    . = ALIGN(4);
-  } >FLASH
 
+    _end_text = .;
 
-  /* Used by the startup to initialize data */
-  _start_load_data = LOADADDR(.data);
+    .data : AT(_end_text) {
+        _start_data = .;
+        *(SORT_BY_ALIGNMENT(.data*))
+        . = ALIGN(4);
+    } > RAM
+    _size_data = SIZEOF(.data);
 
-  /* Initialized data sections into "RAM" Ram type memory */
-  .data :
-  {
-    . = ALIGN(4);
-    _start_data = .;        /* create a global symbol at data start */
-    *(.data)           /* .data sections */
-    *(.data*)          /* .data* sections */
-    *(.RamFunc)        /* .RamFunc sections */
-    *(.RamFunc*)       /* .RamFunc* sections */
+    .bss (NOLOAD) : {
+        _start_bss = .;
+        *(SORT_BY_ALIGNMENT(.bss*) SORT_BY_ALIGNMENT(COMMON*))
+        . = ALIGN(4);
+    } > RAM
+    _size_bss = SIZEOF(.bss);
 
-    . = ALIGN(4);
-    _end_data = .;        /* define a global symbol at data end */
-
-  } >RAM AT> FLASH
-
-  /* Uninitialized data section into "RAM" Ram type memory */
-  . = ALIGN(4);
-  .bss :
-  {
-    /* This is used by the startup in order to initialize the .bss section */
-    _start_bss = .;         /* define a global symbol at bss start */
-    *(.bss)
-    *(.bss*)
-    *(COMMON)
-
-    . = ALIGN(4);
-    _end_bss = .;         /* define a global symbol at bss end */
-  } >RAM
-
-  /* User_heap_stack section, used to check that there is enough "RAM" Ram  type memory left */
-  ._user_heap_stack :
-  {
-    . = ALIGN(8);
-    PROVIDE ( end = . );
-    PROVIDE ( _end = . );
-    . = . + _Min_Heap_Size;
-    . = . + _Min_Stack_Size;
-    . = ALIGN(8);
-  } >RAM
-
-  .ARM.attributes 0 : { *(.ARM.attributes) }
+    /* DWARF 4 */
+    .debug_abbrev 0 : { *(.debug_abbrev) }
+    .debug_aranges 0 : { *(.debug_aranges) }
+    .debug_frame 0 : { *(.debug_frame) }
+    .debug_info 0 : { *(.debug_info) }
+    .debug_line 0 : { *(.debug_line) }
+    .debug_loc 0 : { *(.debug_loc) }
+    .debug_macinfo 0 : { *(.debug_macinfo) }
+    .debug_pubnames 0 : { *(.debug_pubnames) }
+    .debug_pubtypes 0 : { *(.debug_pubtypes) }
+    .debug_ranges 0 : { *(.debug_ranges) }
+    .debug_str 0 : { *(.debug_str) }
+    .debug_types 0 : { *(.debug_types) }
 }
+

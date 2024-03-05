@@ -131,7 +131,8 @@ pub const Priority = packed struct(u8) {
     pub fn encode(priority: Priority) u8 {
         // NOTE: I think this breaks if NVIC_PRIO_BITS > 4
 
-        const grouping = SCB.AIRCR.read().PRIGROUP;
+        // To make sure it fits, otherwise it overflows
+        const grouping: u32 = SCB.AIRCR.read().PRIGROUP;
         // grouping -> [0, 7]
         // NVIC_PRIO_BITS -> N
         // 7 - [0-7] -> [7, 0]
@@ -139,7 +140,7 @@ pub const Priority = packed struct(u8) {
         const preempt_bits: u3 = if (@as(u3, 7) - grouping > NVIC_PRIO_BITS)
             NVIC_PRIO_BITS
         else
-            @as(u3, 7 - grouping);
+            7 - @as(u3, @truncate(grouping));
 
         // grouping -> [0, 7]
         // NVIC_PRIO_BITS -> 4
@@ -148,7 +149,7 @@ pub const Priority = packed struct(u8) {
         const sub_bits: u3 = if (grouping + NVIC_PRIO_BITS < 7)
             0
         else
-            (grouping - 7) + NVIC_PRIO_BITS;
+            @as(u3, @truncate(grouping)) + NVIC_PRIO_BITS - 7;
 
         std.debug.assert(preempt_bits <= 4);
         std.debug.assert(sub_bits <= 4);

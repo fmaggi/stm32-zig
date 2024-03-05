@@ -17,7 +17,7 @@ pub fn main() void {
     while (true) {
         adc.start() catch continue;
         const value = adc.poll(null) catch return orelse continue;
-        if (value > 1000) {
+        if (value < 1000) {
             led.toggle();
         }
     }
