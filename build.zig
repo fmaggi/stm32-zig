@@ -16,7 +16,6 @@ pub fn build(b: *std.Build) void {
         .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m3 },
         .os_tag = .freestanding,
         .abi = .eabi,
-        .ofmt = .c,
     });
     const optimize = b.standardOptimizeOption(.{});
 

@@ -54,9 +54,9 @@ pub fn isReady(adc: ADC) bool {
 
 pub fn wait(adc: ADC, timeout: ?u32) error{Timeout}!void {
     std.debug.assert(!adc.isDMA());
-    const delay = time.timeout_ms(timeout);
+    const delay = time.absolute();
     while (!adc.isReady()) {
-        if (delay.isReached()) return error.Timeout;
+        if (delay.isReached(timeout)) return error.Timeout;
     }
 }
 
@@ -201,9 +201,9 @@ fn writeADON(adc: ADC, value: u1) error{Timeout}!void {
 
     time.delay_us(5);
 
-    const delay = time.timeout_ms(20);
+    const delay = time.absolute();
     while (adc.registers.CR2.read().ADON != value) {
-        if (delay.isReached()) return error.Timeout;
+        if (delay.isReached(20)) return error.Timeout;
     }
 }
 

@@ -118,10 +118,10 @@ pub const Transfer = struct {
     }
 
     pub fn wait(self: Transfer, timeout: ?u32) Error!void {
-        const delay = time.timeout_ms(timeout);
+        const delay = time.absolute();
 
         while (!try self.isDone()) {
-            if (delay.isReached()) return Error.Timeout;
+            if (delay.isReached(timeout)) return Error.Timeout;
         }
     }
 };

@@ -40,11 +40,11 @@ pub export fn _start() callconv(.C) noreturn {
     while (true) {}
 }
 
-pub const std_options = struct {
-    pub const logFn = if (@hasDecl(app, "logFn"))
+pub const std_options: std.Options = .{
+    .logFn = if (@hasDecl(app, "logFn"))
         app.logFn
     else
-        _logFn;
+        _logFn,
 };
 
 fn _logFn(

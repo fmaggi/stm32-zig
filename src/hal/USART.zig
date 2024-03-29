@@ -113,16 +113,16 @@ pub fn flush(self: Self, timeout: ?u32) error{Timeout}!void {
 
 /// For now 9 bit data without parity bit will not work :)
 pub fn transmitBlocking(self: Self, buffer: []const u8, timeout: ?u32) error{Timeout}!void {
-    const delay = time.timeout_ms(timeout);
+    const delay = time.absolute();
 
     const regs = self.registers;
     for (buffer) |b| {
         // I may be able to remove this one?
-        if (delay.isReached()) return error.Timeout;
+        if (delay.isReached(timeout)) return error.Timeout;
 
         while (regs.SR.read().TXE != 1) {
             // Or maybe this one is not needed?
-            if (delay.isReached()) return error.Timeout;
+            if (delay.isReached(timeout)) return error.Timeout;
         }
 
         regs.DR.modify(.{ .DR = b });
@@ -137,16 +137,16 @@ pub const ReadError = error{
 };
 
 pub fn readBlocking(self: Self, buffer: []u8, timeout: ?u32) ReadError!void {
-    const delay = time.timeout_ms(timeout);
+    const delay = time.absolute();
 
     const regs = self.registers;
     for (buffer) |*b| {
         // I may be able to remove this one?
-        if (delay.isReached()) return error.Timeout;
+        if (delay.isReached(timeout)) return error.Timeout;
 
         while (!try self.checkRXflags()) {
             // Or maybe this one is not needed?
-            if (delay.isReached()) return error.Timeout;
+            if (delay.isReached(timeout)) return error.Timeout;
         }
 
         // TODO: Handle flags on 9-bit transmission
