@@ -13,16 +13,26 @@ const FLASH = peripherals.FLASH;
 
 const MHz = 1_000_000;
 
-const Tick = struct {
-    count: u32 = 0,
-    frequency: u32 = 0,
-};
+const AHB_PRESCALE_TABLE: []const u5 = &.{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9 };
+const APB_PRESCALE_TABLE: []const u5 = &.{ 0, 0, 0, 0, 1, 2, 3, 4 };
 
 // System core clk start with HSI as source
 var system_core_clock_frequency: u32 = 8 * MHz;
 
 pub fn systemCoreClockFrequency() u32 {
     return system_core_clock_frequency;
+}
+
+pub fn hclkClockFrequency() u32 {
+    return system_core_clock_frequency;
+}
+
+pub fn pclk1ClockFrequency() u32 {
+    return system_core_clock_frequency >> APB_PRESCALE_TABLE[RCC.CFGR.read().PPRE1];
+}
+
+pub fn pclk2ClockFrequency() u32 {
+    return system_core_clock_frequency >> APB_PRESCALE_TABLE[RCC.CFGR.read().PPRE2];
 }
 
 pub const ConfigError = error{
@@ -307,8 +317,7 @@ const CheckedConfig = struct {
         });
 
         // aparently system core clock is after ahb
-        const hpre_table = [16]u4{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9 };
-        system_core_clock_frequency = config.sys.frequency() >> hpre_table[config.hpre];
+        system_core_clock_frequency = config.sys.frequency() >> AHB_PRESCALE_TABLE[config.hpre];
 
         if (config.hsi == null) {
             try HSI.turnOff(timeouts.hsi);

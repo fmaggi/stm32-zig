@@ -1,5 +1,4 @@
 const hal = @import("hal");
-const time = hal.time;
 const GPIO = hal.GPIO;
 
 pub fn main() void {
@@ -7,11 +6,13 @@ pub fn main() void {
 
     GPIO.Port.enable(.C);
     const led = GPIO.init(.C, 13);
-
     led.asOutput(.{});
 
+    GPIO.Port.enable(.A);
+    const button = GPIO.init(.A, 11);
+    button.asInput(.{ .pull = .down });
+
     while (true) {
-        led.toggle();
-        time.delay_ms(1000);
+        led.write(button.read());
     }
 }

@@ -17,19 +17,19 @@ pub fn delay_ms(ms: u32) void {
     delay_us(ms * 1000);
 }
 
-pub fn timeout_ms(ms: u32) Timeout {
-    const now = hal.getTick();
-    return @enumFromInt(now + ms);
+pub fn asbolute() Absolute {
+    return @enumFromInt(hal.getTick());
 }
 
-pub const Timeout = enum(u32) {
+pub const Absolute = enum(u32) {
     _,
 
-    pub fn isReached(timeout: Timeout) bool {
-        return hal.getTick() >= timeout.to_ms();
+    pub inline fn isReachedAfter(self: Absolute, timeout: ?u32) bool {
+        const n = timeout orelse return false;
+        return hal.getTick() - self.to_ms() > n;
     }
 
-    pub fn to_ms(timeout: Timeout) u32 {
-        return @intFromEnum(timeout);
+    pub inline fn to_ms(self: Absolute) u32 {
+        return @intFromEnum(self);
     }
 };

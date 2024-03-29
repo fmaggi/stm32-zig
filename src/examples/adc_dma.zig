@@ -1,17 +1,21 @@
 const hal = @import("hal");
 const GPIO = hal.GPIO;
 const adc = hal.adc;
+const dma = hal.dma;
 
 pub fn main() void {
     hal.init();
 
-    const adc1 = adc.ADC1;
-
+    const adc1 = adc.ADC1.withDMA();
     adc1.apply(.{
         .channels = &.{
             adc.Channel.A0,
+            adc.Channel.A1,
+            adc.Channel.temperature,
+            // You can repeat channels
+            adc.Channel.A1,
             // Default sampling cycles is 1.5, but you can change it
-            // adc.Channel.A0.withSamplingCycles(.@"7.5"),
+            adc.Channel.A2.withSamplingCycles(.@"7.5"),
         },
     }) catch @panic("Failed to enable ADC");
 
@@ -19,11 +23,13 @@ pub fn main() void {
     const led = GPIO.init(.C, 13);
     led.asOutput(.{});
 
-    while (true) {
-        adc1.start();
-        const value = adc1.waitAndRead(null) catch continue;
+    var buf: [5]u16 = undefined;
 
-        led.write(@intFromBool(value < 1000));
+    while (true) {
+        const transfer = adc1.start(&buf) catch continue;
+        transfer.wait(null) catch unreachable;
+
+        led.write(@intFromBool(buf[0] < 1000));
         hal.time.delay_ms(100);
     }
 }

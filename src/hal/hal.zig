@@ -3,10 +3,12 @@ const std = @import("std");
 const chip = @import("chip");
 
 pub const GPIO = @import("GPIO.zig");
-pub const ADC = @import("ADC.zig");
+pub const adc = @import("adc.zig");
 pub const clocks = @import("clocks.zig");
 pub const time = @import("time.zig");
 pub const interrupts = @import("interrupts.zig");
+pub const USART = @import("USART.zig");
+pub const dma = @import("dma.zig");
 
 pub const VectorTable = @import("vector_table.zig").VectorTable;
 
@@ -39,7 +41,7 @@ pub fn getTick() u32 {
 }
 
 pub fn incrementTick() void {
-    tick += 1;
+    tick +%= 1;
 }
 
 pub fn reset() void {
